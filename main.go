@@ -13,12 +13,14 @@ import (
 	"strings"
 )
 const receiverPort = 8888
-const broadcasterPort = 9200
+const broadcasterPort = 9100
 const spamerPort = 9300
+const randomerPort = 9400
 const deleteOnMissed = 5
 const sendInterval = time.Second *5
 const receiveInterval = time.Second * 5
 const spamInterval = time.Nanosecond * 10
+const randomInterval = time.Millisecond
 
 
 type Timestamp uint64
@@ -30,6 +32,31 @@ type AnnounceData struct {
 
 var receivedData = make(chan AnnounceData, 1000000)
 var endian = binary.BigEndian
+
+func randomer() {
+
+	broadcastConn := openUDPConnOrDie(randomerPort)
+	defer broadcastConn.Close();
+
+	addr, err := net.ResolveUDPAddr("udp4", net.IPv4bcast.String() + ":" + strconv.Itoa(receiverPort))
+	if err != nil {
+		log.Fatalf("Cannot resolve broadcast receiver address: %s", err)
+	}
+
+
+	ticker := time.NewTicker(spamInterval)
+	for _ = range ticker.C {
+		intLen := rand.Uint32() % 128
+		data := make([]byte, intLen * 4)
+		for i := uint32(0); i < intLen; i++ {
+			endian.PutUint32(data[i*4:], rand.Uint32())
+		}
+		_, err = broadcastConn.WriteTo(data, addr)
+		if err != nil {
+			log.Fatalf("Unable to broadcast RANDOM: %s", err)
+		}
+	}
+}
 
 func spammer() {
 	hostname := "SpamSpamSpam      SpamSpamSpamSpamSpamSpamSpamSpamSpamSpamSpamSpam";
@@ -165,6 +192,7 @@ func main() {
 	go broadcaster()
 	go receiver()
 //	go spammer()
+//	go randomer()
 
 	ticker := time.NewTicker(receiveInterval)
 	var addrDataMap  = make(map[uint64]AnnounceData)
